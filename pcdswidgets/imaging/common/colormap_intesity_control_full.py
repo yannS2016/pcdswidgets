@@ -31,7 +31,7 @@ class ColormapIntesityControlFull(ColormapIntesityControlFullBase):
     normalize_check: QtWidgets.QCheckBox
     histogram_container: QtWidgets.QWidget
 
-    # Emitted whenever the user drags the histogram to set manual color-map levels
+    # Emitted once per user drag of the histogram that sets manual color-map levels
     state_changed = QtCore.Signal()
 
     designer_options = DesignerOptions(
@@ -46,6 +46,7 @@ class ColormapIntesityControlFull(ColormapIntesityControlFullBase):
         self._secondary_image_view: PyDMImageView | None = None
         self._image_stream_paused = False
         self._graph_press_active = False
+        self._user_level_drag = False
 
         for cmap_enum in _COLORMAP_ORDER:
             self.colormap_combo.addItem(cmap_names[cmap_enum], cmap_enum)
@@ -119,12 +120,19 @@ class ColormapIntesityControlFull(ColormapIntesityControlFullBase):
             if event.type() == QtCore.QEvent.MouseButtonPress:
                 if event.button() == QtCore.Qt.LeftButton:
                     self._graph_press_active = True
+                    self._user_level_drag = True
                     self._pause_image_stream()
             elif event.type() == QtCore.QEvent.MouseButtonRelease:
                 if event.button() == QtCore.Qt.LeftButton and self._graph_press_active:
                     self._graph_press_active = False
                     self._resume_image_stream()
+                    # The drag's final sigLevelChangeFinished only lands once the scene
+                    # sees this release, i.e. after this filter, so unlatch a turn later.
+                    QtCore.QTimer.singleShot(0, self._end_user_level_drag)
         return super().eventFilter(obj, event)
+
+    def _end_user_level_drag(self) -> None:
+        self._user_level_drag = False
 
     def _sync_histogram_gradient(self, cmap_enum) -> None:
         """Set the histogram gradient to match the given colormap."""
@@ -156,8 +164,14 @@ class ColormapIntesityControlFull(ColormapIntesityControlFullBase):
             image_view.redrawImage()
 
     def _on_levels_changed(self, hist_item) -> None:
-        """Update image view min/max when the user drags histogram levels."""
-        if self._image_view is None:
+        """
+        Update image view min/max when the user drags histogram levels.
+
+        Changes the user did not make are ignored: pyqtgraph also emits
+        sigLevelChangeFinished when the histogram re-syncs to the image item's
+        levels, which PyDM does every frame while normalize is on.
+        """
+        if self._image_view is None or not self._user_level_drag:
             return
         mn, mx = hist_item.getLevels()
         for image_view in self._linked_image_views():

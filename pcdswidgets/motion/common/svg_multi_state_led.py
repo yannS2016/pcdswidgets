@@ -18,6 +18,10 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# Clockwise rotation (degrees) applied to the MOVING arrow icon, which
+# points right by default, so it can point the direction of travel.
+_MOVE_DIRECTION_ANGLES = {"right": 0, "down": 90, "left": 180, "up": 270}
+
 
 class SvgMultiStateLED(PyDMSymbol, DesignerWidget):
     # Designer Widget handlers
@@ -43,6 +47,10 @@ class SvgMultiStateLED(PyDMSymbol, DesignerWidget):
         self._icon_paths = [OK, MOVING, WARNING, ERROR, DISCONNECTED]
         self._state_dict = {"OK": 0, "MOVING": 1, "WARNING": 2, "ERROR": 3, "DISCONNECTED": 4}
         self._connected = False
+
+        # Direction the MOVING arrow icon should point, e.g. set by an
+        # external jog button's clicked signal via set_move_direction().
+        self._move_direction = "right"
 
         super().__init__(*args, **kwargs)
 
@@ -102,8 +110,17 @@ class SvgMultiStateLED(PyDMSymbol, DesignerWidget):
             self._painter.scale(scale[0], scale[1])
             self._painter.drawPixmap(event.rect().x(), event.rect().y(), image_to_draw)
         elif isinstance(image_to_draw, QSvgRenderer):
+            is_moving = self._current_key == self._state_dict["MOVING"]
+            angle = _MOVE_DIRECTION_ANGLES[self._move_direction] if is_moving else 0
+
+            # 90/270 rotation swaps axes on screen, so fit against a
+            # transposed target to avoid clipping the landscape icon.
+            fit_target = QSizeF(event.rect().size())
+            if angle in (90, 270):
+                fit_target.transpose()
+
             draw_size = QSizeF(image_to_draw.defaultSize())
-            draw_size.scale(QSizeF(event.rect().size()), self._aspect_ratio_mode)
+            draw_size.scale(fit_target, self._aspect_ratio_mode)
 
             # CENTER THE SVG, so annoying this had to be done.
             x = (event.rect().width() - draw_size.width()) / 2.0
@@ -112,7 +129,17 @@ class SvgMultiStateLED(PyDMSymbol, DesignerWidget):
             logger.debug(
                 f"paintEvent: Rendering SVG at ({x}, {y}) with size ({draw_size.width()}, {draw_size.height()})"
             )
-            image_to_draw.render(self._painter, QRectF(x, y, draw_size.width(), draw_size.height()))
+            draw_rect = QRectF(x, y, draw_size.width(), draw_size.height())
+
+            if angle:
+                self._painter.save()
+                self._painter.translate(draw_rect.center())
+                self._painter.rotate(angle)
+                self._painter.translate(-draw_rect.center())
+                image_to_draw.render(self._painter, draw_rect)
+                self._painter.restore()
+            else:
+                image_to_draw.render(self._painter, draw_rect)
 
         self._painter.end()
 
@@ -191,6 +218,27 @@ class SvgMultiStateLED(PyDMSymbol, DesignerWidget):
 
         return channels
 
+    def set_move_direction(self, direction: str) -> None:
+        """
+        Set which direction the MOVING arrow icon should point.
+
+        Meant to be called from outside, e.g. connected to a jog button's
+        `clicked` signal, so the arrow reflects the button that was pressed.
+
+        Parameters
+        ----------
+        direction : str
+            One of "up", "down", "left", "right".
+        """
+        if direction not in _MOVE_DIRECTION_ANGLES:
+            logger.warning(f"Invalid move direction: {direction!r}")
+            return
+
+        self._move_direction = direction
+
+        if self._current_key == self._state_dict["MOVING"]:
+            self.update()
+
     def value_changed(self, new_val) -> None:
         """
         Override the value_changed method to do bitmask checks on MSTA,
@@ -230,6 +278,7 @@ class SvgMultiStateLED(PyDMSymbol, DesignerWidget):
 
         elif done:
             self._state = self._state_dict["OK"]
+            self._move_direction = "right"  # fall back to 0 rotation
 
         else:
             self.setToolTip("Current motor Status")
