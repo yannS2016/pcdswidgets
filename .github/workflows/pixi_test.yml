@@ -26,19 +26,19 @@ jobs:
   pre-commit:
     permissions:
       contents: read
-    uses: pcdshub/pcds-ci-helpers/.github/workflows/pre-commit.yml@fb51a19475580d9970705184240d161e0fdbafeb
+    uses: pcdshub/pcds-ci-helpers/.github/workflows/pre-commit.yml@52a413e9d77c09f9e7617c3a75fc19a7d6cf4e11
 
   # Runs the unit tests. Configure this by customizing what happens when we call "pixi run test", e.g. the "test" task.
   unit-tests:
     permissions:
       contents: read
-    uses: pcdshub/pcds-ci-helpers/.github/workflows/python-pixi-test.yml@fb51a19475580d9970705184240d161e0fdbafeb
+    uses: pcdshub/pcds-ci-helpers/.github/workflows/python-pixi-test.yml@52a413e9d77c09f9e7617c3a75fc19a7d6cf4e11
 
   # Creates the files that we would upload to pypi and makes sure they work. "package-name" should be correct to validate the builds.
   pypi-build:
     permissions:
       contents: read
-    uses: pcdshub/pcds-ci-helpers/.github/workflows/python-uv-build.yml@fb51a19475580d9970705184240d161e0fdbafeb
+    uses: pcdshub/pcds-ci-helpers/.github/workflows/python-uv-build.yml@52a413e9d77c09f9e7617c3a75fc19a7d6cf4e11
     with:
       package-name: "pcdswidgets"
 
@@ -79,7 +79,7 @@ jobs:
   docs-build:
     permissions:
       contents: read
-    uses: pcdshub/pcds-ci-helpers/.github/workflows/python-pixi-docs-build.yml@fb51a19475580d9970705184240d161e0fdbafeb
+    uses: pcdshub/pcds-ci-helpers/.github/workflows/python-pixi-docs-build.yml@52a413e9d77c09f9e7617c3a75fc19a7d6cf4e11
 
   # Uploads the documentation html files from docs-build. Requires the "github-pages" environment to be set up.
   docs-upload:
@@ -88,4 +88,4 @@ jobs:
       id-token: write
     needs: docs-build
     if: github.event_name == 'push' && startsWith(github.event.ref, 'refs/tags')
-    uses: pcdshub/pcds-ci-helpers/.github/workflows/docs-upload.yml@fb51a19475580d9970705184240d161e0fdbafeb
+    uses: pcdshub/pcds-ci-helpers/.github/workflows/docs-upload.yml@52a413e9d77c09f9e7617c3a75fc19a7d6cf4e11
